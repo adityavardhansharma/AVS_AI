@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sarvam AI Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    #chat-messages::-webkit-scrollbar { width: 8px; }
+    #chat-messages::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+    #chat-messages::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+    #chat-messages::-webkit-scrollbar-thumb:hover { background: #555; }
+    .blinking-cursor::after { content: '_'; animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col h-[80vh]">
+    <header class="p-4 border-b border-gray-200">
+      <h1 class="text-2xl font-semibold text-gray-800">Sarvam AI Chatbot</h1>
+    </header>
+    <main id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-4"></main>
+    <footer class="p-4 border-t border-gray-200 flex items-center">
+      <input id="user-input" type="text" placeholder="Type your message..." class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mr-2">
+      <button id="send-button" class="bg-blue-600 text-white px-5 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">Send</button>
+    </footer>
+  </div>
+
+  <script>
+    const chatMessages = document.getElementById('chat-messages');
+    const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-button');
+    const BACKEND_URL = '/chat';
+
+    console.log("Script loaded. Elements:", { chatMessages, userInput, sendButton });
+
+    function addMessage(sender, text, isStreaming = false) {
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('flex', sender === 'user' ? 'justify-end' : 'justify-start', 'mb-2');
+
+      const bubble = document.createElement('div');
+      bubble.classList.add('max-w-xs', 'lg:max-w-md', 'px-4', 'py-2', 'rounded-lg');  // Common classes
+
+      // Add sender-specific classes individually
+      if (sender === 'user') {
+        bubble.classList.add('bg-blue-500', 'text-white');
+      } else {
+        bubble.classList.add('bg-gray-200', 'text-gray-800');
+      }
+
+      if (isStreaming) {
+        bubble.classList.add('blinking-cursor');
+      }
+
+      bubble.textContent = text;
+      wrapper.appendChild(bubble);
+      chatMessages.appendChild(wrapper);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return bubble;
+    }
+
+    async function sendMessage() {
+      console.log("sendMessage function called.");
+      const messageText = userInput.value.trim();
+      if (!messageText) return;
+      console.log(`User message: "${messageText}"`);
+      addMessage('user', messageText);
+      userInput.value = '';
+      sendButton.disabled = true;
+      const aiBubble = addMessage('ai', '', true);
+      let accumulatedResponse = '';
+
+      try {
+        console.log(`Sending fetch to: ${BACKEND_URL}`);
+        const response = await fetch(BACKEND_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: messageText }),
+        });
+        console.log("Fetch response received:", response);
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          accumulatedResponse += decoder.decode(value, { stream: true });
+          aiBubble.textContent = accumulatedResponse;
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        aiBubble.classList.remove('blinking-cursor');
+      } catch (error) {
+        console.error("Error in sendMessage:", error);
+        aiBubble.textContent = `Error: ${error.message}`;
+        aiBubble.classList.remove('bg-gray-200', 'blinking-cursor');
+        aiBubble.classList.add('bg-red-200', 'text-red-800');
+      } finally {
+        sendButton.disabled = false;
+        userInput.focus();
+      }
+    }
+
+    if (sendButton && userInput) {
+      sendButton.addEventListener('click', sendMessage);
+      userInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+      console.log("Event listeners attached.");
+    }
+  </script>
+</body>
+</html>
