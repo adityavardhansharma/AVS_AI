@@ -20,9 +20,17 @@
       <h1 class="text-2xl font-semibold text-gray-800">Sarvam AI Chatbot</h1>
     </header>
     <main id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-4"></main>
-    <footer class="p-4 border-t border-gray-200 flex items-center">
-      <input id="user-input" type="text" placeholder="Type your message..." class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mr-2">
-      <button id="send-button" class="bg-blue-600 text-white px-5 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">Send</button>
+    <footer class="p-4 border-t border-gray-200 flex flex-col items-center">
+      <!-- Toggle button for reasoning -->
+      <div class="w-full mb-2 flex justify-center">
+        <button id="toggle-reasoning" class="p-2 border border-gray-300 rounded-lg bg-gray-200 hover:bg-gray-300">
+          Enable Thinking (Medium)
+        </button>
+      </div>
+      <div class="w-full flex items-center">
+        <input id="user-input" type="text" placeholder="Type your message..." class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mr-2">
+        <button id="send-button" class="bg-blue-600 text-white px-5 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">Send</button>
+      </div>
     </footer>
   </div>
 
@@ -30,18 +38,19 @@
     const chatMessages = document.getElementById('chat-messages');
     const userInput = document.getElementById('user-input');
     const sendButton = document.getElementById('send-button');
+    const toggleButton = document.getElementById('toggle-reasoning');
     const BACKEND_URL = '/chat';
+    let reasoningEnabled = false;  // Initial state: Off
 
-    console.log("Script loaded. Elements:", { chatMessages, userInput, sendButton });
+    console.log("Script loaded. Elements:", { chatMessages, userInput, sendButton, toggleButton });
 
     function addMessage(sender, text, isStreaming = false) {
       const wrapper = document.createElement('div');
       wrapper.classList.add('flex', sender === 'user' ? 'justify-end' : 'justify-start', 'mb-2');
 
       const bubble = document.createElement('div');
-      bubble.classList.add('max-w-xs', 'lg:max-w-md', 'px-4', 'py-2', 'rounded-lg');  // Common classes
+      bubble.classList.add('max-w-xs', 'lg:max-w-md', 'px-4', 'py-2', 'rounded-lg');
 
-      // Add sender-specific classes individually
       if (sender === 'user') {
         bubble.classList.add('bg-blue-500', 'text-white');
       } else {
@@ -59,11 +68,26 @@
       return bubble;
     }
 
+    toggleButton.addEventListener('click', () => {
+      reasoningEnabled = !reasoningEnabled;
+      toggleButton.textContent = reasoningEnabled ? 'Disable Thinking' : 'Enable Thinking (Medium)';
+      console.log(`Thinking toggled to: ${reasoningEnabled ? 'On' : 'Off'}`);
+    });
+
     async function sendMessage() {
       console.log("sendMessage function called.");
       const messageText = userInput.value.trim();
+      const payload = { message: messageText };
+
+      if (reasoningEnabled) {
+        payload.reasoning_effort = 'medium';  // Set to medium when enabled
+        console.log("Sending with medium reasoning.");
+      } else {
+        console.log("Sending without reasoning.");
+      }
+
       if (!messageText) return;
-      console.log(`User message: "${messageText}"`);
+
       addMessage('user', messageText);
       userInput.value = '';
       sendButton.disabled = true;
@@ -71,14 +95,17 @@
       let accumulatedResponse = '';
 
       try {
-        console.log(`Sending fetch to: ${BACKEND_URL}`);
+        console.log(`Sending fetch to: ${BACKEND_URL}`, payload);
         const response = await fetch(BACKEND_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: messageText }),
+          body: JSON.stringify(payload),
         });
         console.log("Fetch response received:", response);
-        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP error: ${response.status}`);
+        }
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         while (true) {
@@ -100,7 +127,7 @@
       }
     }
 
-    if (sendButton && userInput) {
+    if (sendButton && userInput && toggleButton) {
       sendButton.addEventListener('click', sendMessage);
       userInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
       console.log("Event listeners attached.");
